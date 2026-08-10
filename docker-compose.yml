@@ -1,0 +1,15 @@
+services:
+  bot:
+    build: .
+    container_name: maqola_bot
+    restart: unless-stopped
+    env_file:
+      - .env
+    volumes:
+      - ./storage:/app/storage
+      - ./media:/app/media
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
