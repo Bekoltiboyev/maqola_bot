@@ -7,7 +7,7 @@ from aiogram.fsm.storage.memory import MemoryStorage
 
 import config
 import database as db
-from handlers import registration, admin, user
+from handlers import registration, admin, user, subscription
 
 logging.basicConfig(
     level=logging.INFO,
@@ -23,7 +23,12 @@ async def main():
     bot = Bot(token=config.BOT_TOKEN, default=DefaultBotProperties(parse_mode="HTML"))
     dp = Dispatcher(storage=MemoryStorage())
 
-    # Tartib muhim: registratsiya -> admin -> oddiy user (fallback handlerlar oxirida)
+    # Majburiy obuna middleware - har bir xabar/tugma bosilishidan oldin ishlaydi
+    dp.message.middleware(subscription.SubscriptionMiddleware())
+    dp.callback_query.middleware(subscription.SubscriptionMiddleware())
+
+    # Tartib muhim: subscription -> registratsiya -> admin -> oddiy user (fallback handlerlar oxirida)
+    dp.include_router(subscription.router)
     dp.include_router(registration.router)
     dp.include_router(admin.router)
     dp.include_router(user.router)

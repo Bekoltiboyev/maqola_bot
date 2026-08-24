@@ -39,6 +39,14 @@ CREATE TABLE IF NOT EXISTS admin_files (
     updated_at TEXT DEFAULT CURRENT_TIMESTAMP
 );
 
+CREATE TABLE IF NOT EXISTS channels (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    chat_id TEXT UNIQUE NOT NULL,
+    url TEXT NOT NULL,
+    title TEXT,
+    added_at TEXT DEFAULT CURRENT_TIMESTAMP
+);
+
 CREATE INDEX IF NOT EXISTS idx_submissions_user ON submissions(user_id);
 CREATE INDEX IF NOT EXISTS idx_submissions_journal ON submissions(journal_id);
 """
@@ -186,3 +194,32 @@ async def get_admin_file(key: str):
         db.row_factory = aiosqlite.Row
         cur = await db.execute("SELECT * FROM admin_files WHERE key = ?", (key,))
         return await cur.fetchone()
+
+
+# ---------------- MAJBURIY KANALLAR (istalgancha) ----------------
+
+async def add_channel(chat_id: str, url: str, title: str = None):
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute(
+            """
+            INSERT INTO channels (chat_id, url, title) VALUES (?, ?, ?)
+            ON CONFLICT(chat_id) DO UPDATE SET
+                url = excluded.url,
+                title = excluded.title
+            """,
+            (chat_id, url, title),
+        )
+        await db.commit()
+
+
+async def remove_channel(channel_id: int):
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute("DELETE FROM channels WHERE id = ?", (channel_id,))
+        await db.commit()
+
+
+async def get_all_channels():
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        cur = await db.execute("SELECT * FROM channels ORDER BY id")
+        return await cur.fetchall()

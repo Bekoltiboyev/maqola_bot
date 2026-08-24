@@ -33,5 +33,27 @@ def admin_panel_keyboard() -> InlineKeyboardMarkup:
             [InlineKeyboardButton(text="✉️ Axborot xatini yuklash", callback_data="admin_upload_info")],
             [InlineKeyboardButton(text="📑 Maqola namunasini yuklash", callback_data="admin_upload_sample")],
             [InlineKeyboardButton(text="📊 Statistika", callback_data="admin_stats")],
+            [InlineKeyboardButton(text="📢 Majburiy kanallar", callback_data="admin_channels")],
+            [InlineKeyboardButton(text="📨 Xabar yuborish (Barchaga)", callback_data="admin_broadcast")],
         ]
     )
+
+
+def subscribe_keyboard(unjoined_channels) -> InlineKeyboardMarkup:
+    """Foydalanuvchi hali qo'shilmagan kanal/guruhlar uchun tugmalar."""
+    buttons = []
+    for ch in unjoined_channels:
+        title = ch["title"] or ch["chat_id"]
+        buttons.append([InlineKeyboardButton(text=f"➕ {title}", url=ch["url"])])
+    buttons.append([InlineKeyboardButton(text="✅ Tekshirish", callback_data="check_sub")])
+    return InlineKeyboardMarkup(inline_keyboard=buttons)
+
+
+def channels_manage_keyboard(channels) -> InlineKeyboardMarkup:
+    """Admin uchun: mavjud kanallar ro'yxati (o'chirish tugmasi bilan) + qo'shish tugmasi."""
+    buttons = []
+    for ch in channels:
+        title = ch["title"] or ch["chat_id"]
+        buttons.append([InlineKeyboardButton(text=f"❌ {title}", callback_data=f"delch_{ch['id']}")])
+    buttons.append([InlineKeyboardButton(text="➕ Yangi kanal qo'shish", callback_data="addch")])
+    return InlineKeyboardMarkup(inline_keyboard=buttons)

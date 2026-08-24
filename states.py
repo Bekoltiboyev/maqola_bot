@@ -13,3 +13,12 @@ class ArticleStates(StatesGroup):
 class AdminUploadStates(StatesGroup):
     waiting_info_letter = State()
     waiting_sample = State()
+
+
+class ChannelStates(StatesGroup):
+    waiting_chat_id = State()
+    waiting_url = State()
+
+
+class BroadcastStates(StatesGroup):
+    waiting_message = State()
