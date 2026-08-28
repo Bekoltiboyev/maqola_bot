@@ -57,3 +57,15 @@ def channels_manage_keyboard(channels) -> InlineKeyboardMarkup:
         buttons.append([InlineKeyboardButton(text=f"❌ {title}", callback_data=f"delch_{ch['id']}")])
     buttons.append([InlineKeyboardButton(text="➕ Yangi kanal qo'shish", callback_data="addch")])
     return InlineKeyboardMarkup(inline_keyboard=buttons)
+
+
+def review_keyboard(submission_id: int) -> InlineKeyboardMarkup:
+    """Har bir yangi maqolaostida chiqadigan Qabul qilindi / Rad etish tugmalari."""
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(text="✅ Qabul qilindi", callback_data=f"approve_{submission_id}"),
+                InlineKeyboardButton(text="❌ Rad etish", callback_data=f"reject_{submission_id}"),
+            ]
+        ]
+    )

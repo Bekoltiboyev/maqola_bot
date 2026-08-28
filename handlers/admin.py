@@ -5,7 +5,7 @@ from aiogram.filters import Command
 
 import database as db
 import config
-from states import AdminUploadStates, ChannelStates, BroadcastStates
+from states import AdminUploadStates, ChannelStates, BroadcastStates, ReviewStates
 from keyboards import admin_panel_keyboard, channels_manage_keyboard
 
 router = Router()
@@ -210,3 +210,111 @@ async def broadcast_send(message: Message, state: FSMContext, bot: Bot):
 
     await status.edit_text(f"📨 Xabar yuborildi: {sent} ta ✅ | {failed} ta ❌")
     await message.answer("Admin panel:", reply_markup=admin_panel_keyboard())
+
+
+# ==================== MAQOLALARNI KO'RIB CHIQISH (Qabul / Rad etish) ====================
+
+@router.callback_query(F.data.startswith("approve_"))
+async def approve_submission(callback: CallbackQuery, bot: Bot):
+    submission_id = int(callback.data.split("_", 1)[1])
+    sub = await db.get_submission_full(submission_id)
+
+    if not sub:
+        await callback.answer("❗ Maqola topilmadi.", show_alert=True)
+        return
+
+    if sub["status"] != "pending":
+        await callback.answer("⚠️ Bu maqola allaqachon ko'rib chiqilgan.", show_alert=True)
+        return
+
+    await db.set_submission_status(submission_id, "approved")
+    await callback.answer("✅ Qabul qilindi")
+
+    try:
+        await callback.message.edit_caption(
+            caption=(callback.message.caption or "") + "\n\n✅ <b>QABUL QILINDI</b>",
+            reply_markup=None,
+        )
+    except Exception:
+        pass
+
+    try:
+        await bot.send_message(
+            sub["user_tg_id"],
+            f"🎉 <b>Tabriklaymiz!</b>\n\n"
+            f"№{sub['journal_number']}-jurnal uchun yuborgan <b>{sub['file_name']}</b> nomli maqolangiz "
+            f"qabul qilindi!",
+        )
+    except Exception:
+        pass
+
+
+@router.callback_query(F.data.startswith("reject_"))
+async def reject_start(callback: CallbackQuery, state: FSMContext):
+    submission_id = int(callback.data.split("_", 1)[1])
+    sub = await db.get_submission_full(submission_id)
+
+    if not sub:
+        await callback.answer("❗ Maqola topilmadi.", show_alert=True)
+        return
+
+    if sub["status"] != "pending":
+        await callback.answer("⚠️ Bu maqola allaqachon ko'rib chiqilgan.", show_alert=True)
+        return
+
+    await callback.answer()
+    await state.update_data(submission_id=submission_id, admin_msg_id=callback.message.message_id, admin_chat_id=callback.message.chat.id)
+    await callback.message.answer(
+        "✍️ Rad etish sababini yozing — bu xabar aynan shu ko'rinishda foydalanuvchiga yuboriladi.\n\n"
+        "Bekor qilish uchun /cancel"
+    )
+    await state.set_state(ReviewStates.waiting_reject_reason)
+
+
+@router.message(Command("cancel"), ReviewStates.waiting_reject_reason)
+async def reject_cancel(message: Message, state: FSMContext):
+    await state.clear()
+    await message.answer("❌ Bekor qilindi.", reply_markup=admin_panel_keyboard())
+
+
+@router.message(ReviewStates.waiting_reject_reason, F.text)
+async def reject_finish(message: Message, state: FSMContext, bot: Bot):
+    data = await state.get_data()
+    submission_id = data["submission_id"]
+    reason = message.text.strip()
+
+    sub = await db.get_submission_full(submission_id)
+    await state.clear()
+
+    if not sub or sub["status"] != "pending":
+        await message.answer("⚠️ Bu maqola allaqachon ko'rib chiqilgan yoki topilmadi.", reply_markup=admin_panel_keyboard())
+        return
+
+    await db.set_submission_status(submission_id, "rejected", reason)
+
+    try:
+        await bot.edit_message_caption(
+            chat_id=data["admin_chat_id"],
+            message_id=data["admin_msg_id"],
+            caption=(
+                f"📥 <b>Maqola</b>\n"
+                f"👤 {sub['user_full_name']}\n"
+                f"📚 Jurnal: №{sub['journal_number']}\n\n"
+                f"❌ <b>RAD ETILDI</b>\nSabab: {reason}"
+            ),
+            reply_markup=None,
+        )
+    except Exception:
+        pass
+
+    try:
+        await bot.send_message(
+            sub["user_tg_id"],
+            f"❌ Afsuski, №{sub['journal_number']}-jurnal uchun yuborgan <b>{sub['file_name']}</b> nomli "
+            f"maqolangiz rad etildi.\n\n"
+            f"<b>Sabab:</b> {reason}",
+        )
+    except Exception:
+        pass
+
+    await message.answer("✅ Rad etish sababi foydalanuvchiga yuborildi.", reply_markup=admin_panel_keyboard())

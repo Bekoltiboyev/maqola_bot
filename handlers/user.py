@@ -8,7 +8,7 @@ from aiogram.fsm.context import FSMContext
 import database as db
 import config
 from states import ArticleStates
-from keyboards import main_menu_keyboard
+from keyboards import main_menu_keyboard, review_keyboard
 
 router = Router()
 
@@ -102,7 +102,7 @@ async def receive_article_file(message: Message, state: FSMContext, bot: Bot):
         )
         return
 
-    await db.add_submission(user["id"], journal["id"], doc.file_name, dest_path, ext)
+    submission_id = await db.add_submission(user["id"], journal["id"], doc.file_name, dest_path, ext)
 
     await message.answer(
         "✅ Maqolangiz muvaffaqiyatli qabul qilindi! Rahmat.",
@@ -122,6 +122,7 @@ async def receive_article_file(message: Message, state: FSMContext, bot: Bot):
                     f"🆔 tg_id: {user['tg_id']}\n"
                     f"📚 Jurnal: №{journal['number']}"
                 ),
+                reply_markup=review_keyboard(submission_id),
             )
         except Exception:
             pass
@@ -148,9 +149,15 @@ async def my_articles(message: Message):
         return
 
     lines = ["📄 <b>Sizning maqolalaringiz:</b>\n"]
+    status_map = {
+        "pending": "⏳ Ko'rib chiqilmoqda",
+        "approved": "✅ Qabul qilindi",
+        "rejected": "❌ Rad etildi",
+    }
     for s in subs:
         date = (s["submitted_at"] or "").split(".")[0]
-        lines.append(f"• №{s['journal_number']}-jurnal — {s['file_name']} ({date})")
+        status_text = status_map.get(s["status"] or "pending", "⏳ Ko'rib chiqilmoqda")
+        lines.append(f"• №{s['journal_number']}-jurnal — {s['file_name']} ({date})\n  Holati: {status_text}")
 
     await message.answer("\n".join(lines))
 

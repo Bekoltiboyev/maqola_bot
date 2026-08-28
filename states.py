@@ -22,3 +22,7 @@ class ChannelStates(StatesGroup):
 
 class BroadcastStates(StatesGroup):
     waiting_message = State()
+
+
+class ReviewStates(StatesGroup):
+    waiting_reject_reason = State()

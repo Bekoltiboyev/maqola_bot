@@ -28,6 +28,8 @@ CREATE TABLE IF NOT EXISTS submissions (
     file_path TEXT NOT NULL,
     file_ext TEXT NOT NULL,
     submitted_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    status TEXT DEFAULT 'pending',
+    admin_comment TEXT,
     FOREIGN KEY(user_id) REFERENCES users(id),
     FOREIGN KEY(journal_id) REFERENCES journals(id)
 );
@@ -56,6 +58,18 @@ async def init_db():
     async with aiosqlite.connect(DB_PATH) as db:
         await db.executescript(SCHEMA)
         await db.commit()
+
+        # Migratsiya: eski bazada 'submissions' jadvalida status/admin_comment ustunlari bo'lmasligi mumkin
+        for ddl in (
+            "ALTER TABLE submissions ADD COLUMN status TEXT DEFAULT 'pending'",
+            "ALTER TABLE submissions ADD COLUMN admin_comment TEXT",
+        ):
+            try:
+                await db.execute(ddl)
+                await db.commit()
+            except Exception:
+                pass  # ustun allaqachon mavjud
+
         cur = await db.execute("SELECT COUNT(*) FROM journals")
         row = await cur.fetchone()
         if row[0] == 0:
@@ -138,14 +152,15 @@ async def has_submitted(user_id: int, journal_id: int) -> bool:
         return row[0] > 0
 
 
-async def add_submission(user_id: int, journal_id: int, file_name: str, file_path: str, file_ext: str):
+async def add_submission(user_id: int, journal_id: int, file_name: str, file_path: str, file_ext: str) -> int:
     async with aiosqlite.connect(DB_PATH) as db:
-        await db.execute(
+        cur = await db.execute(
             "INSERT INTO submissions (user_id, journal_id, file_name, file_path, file_ext) "
             "VALUES (?, ?, ?, ?, ?)",
             (user_id, journal_id, file_name, file_path, file_ext),
         )
         await db.commit()
+        return cur.lastrowid
 
 
 async def get_user_submissions(user_id: int):
@@ -169,6 +184,32 @@ async def count_submissions():
         cur = await db.execute("SELECT COUNT(*) FROM submissions")
         row = await cur.fetchone()
         return row[0]
+
+
+async def get_submission_full(submission_id: int):
+    """Maqolani foydalanuvchi va jurnal ma'lumotlari bilan birga qaytaradi (admin ko'rib chiqishi uchun)."""
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        cur = await db.execute(
+            """
+            SELECT s.*, u.tg_id AS user_tg_id, u.full_name AS user_full_name, j.number AS journal_number
+            FROM submissions s
+            JOIN users u ON s.user_id = u.id
+            JOIN journals j ON s.journal_id = j.id
+            WHERE s.id = ?
+            """,
+            (submission_id,),
+        )
+        return await cur.fetchone()
+
+
+async def set_submission_status(submission_id: int, status: str, admin_comment: str = None):
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute(
+            "UPDATE submissions SET status = ?, admin_comment = ? WHERE id = ?",
+            (status, admin_comment, submission_id),
+        )
+        await db.commit()
 
 
 # ---------------- ADMIN FILES (Axborot xati / Maqola namunasi) ----------------
