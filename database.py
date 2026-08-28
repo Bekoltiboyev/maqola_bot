@@ -264,3 +264,16 @@ async def get_all_channels():
         db.row_factory = aiosqlite.Row
         cur = await db.execute("SELECT * FROM channels ORDER BY id")
         return await cur.fetchall()
+
+
+async def get_channel(channel_id: int):
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        cur = await db.execute("SELECT * FROM channels WHERE id = ?", (channel_id,))
+        return await cur.fetchone()
+
+
+async def update_channel_title(channel_id: int, title: str):
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute("UPDATE channels SET title = ? WHERE id = ?", (title, channel_id))
+        await db.commit()

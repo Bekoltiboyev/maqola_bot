@@ -50,11 +50,14 @@ def subscribe_keyboard(unjoined_channels) -> InlineKeyboardMarkup:
 
 
 def channels_manage_keyboard(channels) -> InlineKeyboardMarkup:
-    """Admin uchun: mavjud kanallar ro'yxati (o'chirish tugmasi bilan) + qo'shish tugmasi."""
+    """Admin uchun: mavjud kanallar ro'yxati (yangilash/o'chirish tugmalari bilan) + qo'shish tugmasi."""
     buttons = []
     for ch in channels:
         title = ch["title"] or ch["chat_id"]
-        buttons.append([InlineKeyboardButton(text=f"❌ {title}", callback_data=f"delch_{ch['id']}")])
+        buttons.append([
+            InlineKeyboardButton(text=f"🔄 {title}", callback_data=f"refch_{ch['id']}"),
+            InlineKeyboardButton(text="❌", callback_data=f"delch_{ch['id']}"),
+        ])
     buttons.append([InlineKeyboardButton(text="➕ Yangi kanal qo'shish", callback_data="addch")])
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 

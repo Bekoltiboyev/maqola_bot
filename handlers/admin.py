@@ -162,6 +162,33 @@ async def addch_url(message: Message, state: FSMContext, bot: Bot):
     await message.answer(f"✅ Kanal qo'shildi: {title} ({chat_id}){warn}", reply_markup=admin_panel_keyboard())
 
 
+@router.callback_query(F.data.startswith("refch_"))
+async def refresh_channel(callback: CallbackQuery, bot: Bot):
+    channel_id = int(callback.data.split("_", 1)[1])
+    ch = await db.get_channel(channel_id)
+    if not ch:
+        await callback.answer("❗ Kanal topilmadi.", show_alert=True)
+        return
+
+    try:
+        chat = await bot.get_chat(ch["chat_id"])
+        new_title = chat.title or ch["chat_id"]
+        await db.update_channel_title(channel_id, new_title)
+        await callback.answer(f"✅ Yangilandi: {new_title}")
+    except Exception:
+        await callback.answer(
+            "❗ Kanal nomini ololmadim. Bot shu yerda ADMIN ekanini tekshiring.",
+            show_alert=True,
+        )
+        return
+
+    channels = await db.get_all_channels()
+    try:
+        await callback.message.edit_text(_channels_text(channels), reply_markup=channels_manage_keyboard(channels))
+    except Exception:
+        pass
+
+
 @router.callback_query(F.data.startswith("delch_"))
 async def delch(callback: CallbackQuery):
     channel_id = int(callback.data.split("_", 1)[1])
