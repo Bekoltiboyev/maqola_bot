@@ -33,6 +33,7 @@ def admin_panel_keyboard() -> InlineKeyboardMarkup:
             [InlineKeyboardButton(text="✉️ Axborot xatini yuklash", callback_data="admin_upload_info")],
             [InlineKeyboardButton(text="📑 Maqola namunasini yuklash", callback_data="admin_upload_sample")],
             [InlineKeyboardButton(text="📊 Statistika", callback_data="admin_stats")],
+            [InlineKeyboardButton(text="📋 Ko'rib chiqilmagan maqolalar", callback_data="admin_pending")],
             [InlineKeyboardButton(text="📢 Majburiy kanallar", callback_data="admin_channels")],
             [InlineKeyboardButton(text="📨 Xabar yuborish (Barchaga)", callback_data="admin_broadcast")],
         ]

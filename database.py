@@ -186,7 +186,22 @@ async def count_submissions():
         return row[0]
 
 
-async def get_submission_full(submission_id: int):
+async def get_pending_submissions():
+    """Hali ko'rib chiqilmagan (status='pending') barcha maqolalarni qaytaradi."""
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        cur = await db.execute(
+            """
+            SELECT s.*, u.tg_id AS user_tg_id, u.full_name AS user_full_name,
+                   u.phone AS user_phone, j.number AS journal_number
+            FROM submissions s
+            JOIN users u ON s.user_id = u.id
+            JOIN journals j ON s.journal_id = j.id
+            WHERE s.status = 'pending' OR s.status IS NULL
+            ORDER BY s.id
+            """
+        )
+        return await cur.fetchall()
     """Maqolani foydalanuvchi va jurnal ma'lumotlari bilan birga qaytaradi (admin ko'rib chiqishi uchun)."""
     async with aiosqlite.connect(DB_PATH) as db:
         db.row_factory = aiosqlite.Row

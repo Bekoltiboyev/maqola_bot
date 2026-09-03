@@ -1,12 +1,13 @@
 from aiogram import Router, F, Bot
-from aiogram.types import Message, CallbackQuery
+from aiogram.types import Message, CallbackQuery, FSInputFile
 from aiogram.fsm.context import FSMContext
 from aiogram.filters import Command
 
+import os
 import database as db
 import config
 from states import AdminUploadStates, ChannelStates, BroadcastStates, ReviewStates
-from keyboards import admin_panel_keyboard, channels_manage_keyboard
+from keyboards import admin_panel_keyboard, channels_manage_keyboard, review_keyboard
 
 router = Router()
 # Ushbu router faqat ADMIN_IDS ro'yxatidagi foydalanuvchilar uchun ishlaydi
@@ -90,6 +91,43 @@ async def stats(callback: CallbackQuery):
         f"📚 Jurnallar: {journals} (joriy: №{current['number']})\n"
         f"📥 Jami maqolalar: {subs}"
     )
+
+
+@router.callback_query(F.data == "admin_pending")
+async def show_pending_submissions(callback: CallbackQuery, bot: Bot):
+    await callback.answer()
+    pending = await db.get_pending_submissions()
+
+    if not pending:
+        await callback.message.answer("✅ Ko'rib chiqilmagan maqolalar yo'q.")
+        return
+
+    await callback.message.answer(f"📋 Jami {len(pending)} ta ko'rib chiqilmagan maqola topildi, yuborilmoqda...")
+
+    for sub in pending:
+        caption = (
+            "📥 <b>Maqola</b>\n"
+            f"👤 {sub['user_full_name']}\n"
+            f"📱 {sub['user_phone']}\n"
+            f"🆔 tg_id: {sub['user_tg_id']}\n"
+            f"📚 Jurnal: №{sub['journal_number']}"
+        )
+        try:
+            if os.path.exists(sub["file_path"]):
+                await bot.send_document(
+                    callback.from_user.id,
+                    FSInputFile(sub["file_path"], filename=sub["file_name"]),
+                    caption=caption,
+                    reply_markup=review_keyboard(sub["id"]),
+                )
+            else:
+                await bot.send_message(
+                    callback.from_user.id,
+                    caption + f"\n\n⚠️ Fayl serverda topilmadi: {sub['file_name']}",
+                    reply_markup=review_keyboard(sub["id"]),
+                )
+        except Exception:
+            pass
 
 
 # ==================== MAJBURIY KANALLAR (istalgancha) ====================
