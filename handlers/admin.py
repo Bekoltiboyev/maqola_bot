@@ -7,12 +7,48 @@ import os
 import database as db
 import config
 from states import AdminUploadStates, ChannelStates, BroadcastStates, ReviewStates
-from keyboards import admin_panel_keyboard, channels_manage_keyboard, review_keyboard
+from keyboards import (
+    admin_panel_keyboard,
+    channels_manage_keyboard,
+    review_keyboard,
+    reject_reason_keyboard,
+    approve_choice_keyboard,
+)
 
 router = Router()
 # Ushbu router faqat ADMIN_IDS ro'yxatidagi foydalanuvchilar uchun ishlaydi
 router.message.filter(F.from_user.id.in_(config.ADMIN_IDS))
 router.callback_query.filter(F.from_user.id.in_(config.ADMIN_IDS))
+
+# Tayyor rad etish sabablari (tugma bosilganda avtomatik shu matn yuboriladi)
+REJECT_REASONS = {
+    "r1": (
+        "Maqola umumiy jihatdan yaxshi ilmiy saviyada yozilgan. Mazmuni va mavzusi dolzarb bo'lib, "
+        "tadqiqot natijalari e'tiborga loyiq. Shu bilan birga, maqolada ayrim kichik kamchiliklar mavjud. "
+        "Xususan, 1–2 ta jihatni aniqlashtirish va takomillashtirish talab etiladi.\n\n"
+        "Mazkur kamchiliklar bartaraf etilgach, maqolani keyingi son uchun nashrga tavsiya etish mumkin.\n\n"
+        "Ma'lumot uchun: 998-50-221-03-30"
+    ),
+    "r2": (
+        "Sizning maqolangizda mustaqil ilmiy natijalari va shaxsiy ilmiy hissasi yetarlicha namoyon bo'lmagan. "
+        "Tadqiqot O'zbekistonning milliy konteksti, mahalliy ma'lumotlar hamda amaliy ehtiyojlar bilan "
+        "yetarlicha bog'lanmagan. Xulosalar asosan umumiy xarakterga ega bo'lib, muallifning ilmiy yangiligi "
+        "va tadqiqot natijalari aniq ko'zga tashlanmaydi.\n\n"
+        "Shu munosabat bilan, mazkur maqolani hamda uning muallifini tanlov g'olibi sifatida tavsiya etish "
+        "maqsadga muvofiq emas."
+    ),
+    "r3": (
+        "Mazkur tanlov yosh tadqiqotchi xotin-qizlar uchun mo'ljallanganligini e'tiborga olib, bu boradagi "
+        "Sizning tajribangiz va salohiyatingizni inobatga olgan holda, maqolangiz tanlovda ishtirok etmadi."
+    ),
+}
+
+# Qabul qilishda tanlanadigan rasmiy xabar (standart tabrik matnidan farqli, ixtiyoriy)
+APPROVE_OFFICIAL_MESSAGE = (
+    "Maqolangiz tanlov doirasida tahririyat tomonidan ko'rib chiqildi va nashr uchun qabul qilindi. "
+    "Maqola tanlov shartlariga muvofiq bepul nashr etiladi. Tabriklaymiz! "
+    "Ilmiy va ijodiy faoliyatingizda muvaffaqiyatlar tilaymiz!"
+)
 
 
 @router.message(Command("admin"))
@@ -280,8 +316,29 @@ async def broadcast_send(message: Message, state: FSMContext, bot: Bot):
 # ==================== MAQOLALARNI KO'RIB CHIQISH (Qabul / Rad etish) ====================
 
 @router.callback_query(F.data.startswith("approve_"))
-async def approve_submission(callback: CallbackQuery, bot: Bot):
+async def approve_start(callback: CallbackQuery):
     submission_id = int(callback.data.split("_", 1)[1])
+    sub = await db.get_submission_full(submission_id)
+
+    if not sub:
+        await callback.answer("❗ Maqola topilmadi.", show_alert=True)
+        return
+
+    if sub["status"] != "pending":
+        await callback.answer("⚠️ Bu maqola allaqachon ko'rib chiqilgan.", show_alert=True)
+        return
+
+    await callback.answer()
+    try:
+        await callback.message.edit_reply_markup(reply_markup=approve_choice_keyboard(submission_id))
+    except Exception:
+        pass
+
+
+@router.callback_query(F.data.startswith("apreason_"))
+async def approve_finish(callback: CallbackQuery, bot: Bot):
+    _, submission_id_str, key = callback.data.split("_", 2)
+    submission_id = int(submission_id_str)
     sub = await db.get_submission_full(submission_id)
 
     if not sub:
@@ -297,25 +354,34 @@ async def approve_submission(callback: CallbackQuery, bot: Bot):
 
     try:
         await callback.message.edit_caption(
-            caption=(callback.message.caption or "") + "\n\n✅ <b>QABUL QILINDI</b>",
+            caption=(
+                f"📥 <b>Maqola</b>\n"
+                f"👤 {sub['user_full_name']}\n"
+                f"📚 Jurnal: №{sub['journal_number']}\n\n"
+                f"✅ <b>QABUL QILINDI</b>"
+            ),
             reply_markup=None,
         )
     except Exception:
         pass
 
-    try:
-        await bot.send_message(
-            sub["user_tg_id"],
+    if key == "official":
+        user_msg = APPROVE_OFFICIAL_MESSAGE
+    else:
+        user_msg = (
             f"🎉 <b>Tabriklaymiz!</b>\n\n"
             f"№{sub['journal_number']}-jurnal uchun yuborgan <b>{sub['file_name']}</b> nomli maqolangiz "
-            f"qabul qilindi!",
+            f"qabul qilindi!"
         )
+
+    try:
+        await bot.send_message(sub["user_tg_id"], user_msg)
     except Exception:
         pass
 
 
 @router.callback_query(F.data.startswith("reject_"))
-async def reject_start(callback: CallbackQuery, state: FSMContext):
+async def reject_start(callback: CallbackQuery):
     submission_id = int(callback.data.split("_", 1)[1])
     sub = await db.get_submission_full(submission_id)
 
@@ -328,12 +394,85 @@ async def reject_start(callback: CallbackQuery, state: FSMContext):
         return
 
     await callback.answer()
-    await state.update_data(submission_id=submission_id, admin_msg_id=callback.message.message_id, admin_chat_id=callback.message.chat.id)
-    await callback.message.answer(
-        "✍️ Rad etish sababini yozing — bu xabar aynan shu ko'rinishda foydalanuvchiga yuboriladi.\n\n"
-        "Bekor qilish uchun /cancel"
-    )
-    await state.set_state(ReviewStates.waiting_reject_reason)
+    try:
+        await callback.message.edit_reply_markup(reply_markup=reject_reason_keyboard(submission_id))
+    except Exception:
+        pass
+
+
+@router.callback_query(F.data.startswith("backrev_"))
+async def back_to_review(callback: CallbackQuery):
+    submission_id = int(callback.data.split("_", 1)[1])
+    await callback.answer()
+    try:
+        await callback.message.edit_reply_markup(reply_markup=review_keyboard(submission_id))
+    except Exception:
+        pass
+
+
+async def _finish_rejection(bot: Bot, sub, reason: str, admin_chat_id: int, admin_msg_id: int):
+    await db.set_submission_status(sub["id"], "rejected", reason)
+
+    try:
+        await bot.edit_message_caption(
+            chat_id=admin_chat_id,
+            message_id=admin_msg_id,
+            caption=(
+                f"📥 <b>Maqola</b>\n"
+                f"👤 {sub['user_full_name']}\n"
+                f"📚 Jurnal: №{sub['journal_number']}\n\n"
+                f"❌ <b>RAD ETILDI</b>\nSabab: {reason}"
+            ),
+            reply_markup=None,
+        )
+    except Exception:
+        pass
+
+    try:
+        await bot.send_message(
+            sub["user_tg_id"],
+            f"❌ Afsuski, №{sub['journal_number']}-jurnal uchun yuborgan <b>{sub['file_name']}</b> nomli "
+            f"maqolangiz rad etildi.\n\n"
+            f"<b>Sabab:</b> {reason}",
+        )
+    except Exception:
+        pass
+
+
+@router.callback_query(F.data.startswith("rreason_"))
+async def reject_with_preset_reason(callback: CallbackQuery, state: FSMContext, bot: Bot):
+    _, submission_id_str, key = callback.data.split("_", 2)
+    submission_id = int(submission_id_str)
+
+    sub = await db.get_submission_full(submission_id)
+    if not sub:
+        await callback.answer("❗ Maqola topilmadi.", show_alert=True)
+        return
+    if sub["status"] != "pending":
+        await callback.answer("⚠️ Bu maqola allaqachon ko'rib chiqilgan.", show_alert=True)
+        return
+
+    if key == "custom":
+        await callback.answer()
+        await state.update_data(
+            submission_id=submission_id,
+            admin_msg_id=callback.message.message_id,
+            admin_chat_id=callback.message.chat.id,
+        )
+        await callback.message.answer(
+            "✍️ Rad etish sababini yozing — bu xabar aynan shu ko'rinishda foydalanuvchiga yuboriladi.\n\n"
+            "Bekor qilish uchun /cancel"
+        )
+        await state.set_state(ReviewStates.waiting_reject_reason)
+        return
+
+    reason = REJECT_REASONS.get(key)
+    if not reason:
+        await callback.answer("❗ Noma'lum sabab.", show_alert=True)
+        return
+
+    await callback.answer("✅ Yuborildi")
+    await _finish_rejection(bot, sub, reason, callback.message.chat.id, callback.message.message_id)
 
 
 @router.message(Command("cancel"), ReviewStates.waiting_reject_reason)
@@ -355,31 +494,6 @@ async def reject_finish(message: Message, state: FSMContext, bot: Bot):
         await message.answer("⚠️ Bu maqola allaqachon ko'rib chiqilgan yoki topilmadi.", reply_markup=admin_panel_keyboard())
         return
 
-    await db.set_submission_status(submission_id, "rejected", reason)
-
-    try:
-        await bot.edit_message_caption(
-            chat_id=data["admin_chat_id"],
-            message_id=data["admin_msg_id"],
-            caption=(
-                f"📥 <b>Maqola</b>\n"
-                f"👤 {sub['user_full_name']}\n"
-                f"📚 Jurnal: №{sub['journal_number']}\n\n"
-                f"❌ <b>RAD ETILDI</b>\nSabab: {reason}"
-            ),
-            reply_markup=None,
-        )
-    except Exception:
-        pass
-
-    try:
-        await bot.send_message(
-            sub["user_tg_id"],
-            f"❌ Afsuski, №{sub['journal_number']}-jurnal uchun yuborgan <b>{sub['file_name']}</b> nomli "
-            f"maqolangiz rad etildi.\n\n"
-            f"<b>Sabab:</b> {reason}",
-        )
-    except Exception:
-        pass
+    await _finish_rejection(bot, sub, reason, data["admin_chat_id"], data["admin_msg_id"])
 
     await message.answer("✅ Rad etish sababi foydalanuvchiga yuborildi.", reply_markup=admin_panel_keyboard())

@@ -73,3 +73,27 @@ def review_keyboard(submission_id: int) -> InlineKeyboardMarkup:
             ]
         ]
     )
+
+
+def reject_reason_keyboard(submission_id: int) -> InlineKeyboardMarkup:
+    """Rad etish sababini tanlash uchun tayyor variantlar menyusi."""
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="🔸 Yengil tuzatish talab etiladi", callback_data=f"rreason_{submission_id}_r1")],
+            [InlineKeyboardButton(text="🔸 Mustaqil ilmiy hissa yetarli emas", callback_data=f"rreason_{submission_id}_r2")],
+            [InlineKeyboardButton(text="🔸 Tanlov shartiga mos emas", callback_data=f"rreason_{submission_id}_r3")],
+            [InlineKeyboardButton(text="✍️ Boshqa sabab yozish", callback_data=f"rreason_{submission_id}_custom")],
+            [InlineKeyboardButton(text="⬅️ Orqaga", callback_data=f"backrev_{submission_id}")],
+        ]
+    )
+
+
+def approve_choice_keyboard(submission_id: int) -> InlineKeyboardMarkup:
+    """Qabul qilish uchun qaysi xabar yuborilishini tanlash menyusi."""
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="✅ Standart tabrik xabari", callback_data=f"apreason_{submission_id}_std")],
+            [InlineKeyboardButton(text="📜 Rasmiy xabar (nashr uchun qabul)", callback_data=f"apreason_{submission_id}_official")],
+            [InlineKeyboardButton(text="⬅️ Orqaga", callback_data=f"backrev_{submission_id}")],
+        ]
+    )
