@@ -202,6 +202,9 @@ async def get_pending_submissions():
             """
         )
         return await cur.fetchall()
+
+
+async def get_submission_full(submission_id: int):
     """Maqolani foydalanuvchi va jurnal ma'lumotlari bilan birga qaytaradi (admin ko'rib chiqishi uchun)."""
     async with aiosqlite.connect(DB_PATH) as db:
         db.row_factory = aiosqlite.Row
